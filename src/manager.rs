@@ -18,7 +18,7 @@ lazy_static! {
         RwLock::new(HashMap::with_capacity(TOPICS_CAPACITY));
 }
 
-#[derive(PartialEq)]
+#[derive(Debug, PartialEq)]
 pub struct ClientToken(usize);
 
 impl ClientToken {

@@ -79,8 +79,6 @@ impl Iterator for Decoder {
             _ => unreachable!(),
         };
 
-        println!("> {:?}", message);
-
         Some(message)
     }
 }

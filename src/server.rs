@@ -11,7 +11,11 @@ use protocol::{IncomingMessage, OutcomingMessage};
 const PORT: u16 = 3001;
 
 fn reader(stream: TcpStream, token: ClientToken) {
+    println!("Connected: {:?}", token);
+
     for message in Decoder::new(stream) {
+        println!("< {:?}", message);
+
         match message {
             IncomingMessage::Create { topic_name } => {
                 manager::create(&token, topic_name);
@@ -24,12 +28,17 @@ fn reader(stream: TcpStream, token: ClientToken) {
             },
         };
     }
+
+    println!("Disconnected: {:?}", token);
+
+    manager::disconnect(token);
 }
 
 fn writer(stream: TcpStream, receiver: Receiver<OutcomingMessage>) {
     let mut encoder = Encoder::new(stream);
 
     for message in receiver {
+        println!("> {:?}", message);
         encoder.write(message);
     }
 }

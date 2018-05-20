@@ -19,8 +19,6 @@ impl<W: Write> Encoder<W> {
     }
 
     pub fn write(&mut self, message: OutcomingMessage) {
-        println!("< {:?}", message);
-
         match message {
             OutcomingMessage::Ok => {
                 self.writer.write(b"OK\n").unwrap();
