@@ -12,7 +12,7 @@
    <msg>\n
 */
 
-use std::rc::Rc;
+use std::sync::Arc;
 
 use bufpool::Buffer;
 
@@ -33,9 +33,9 @@ pub enum IncomingMessage {
 #[derive(Debug)]
 pub enum OutcomingMessage {
     Ok,
-    Error {
-    },
+    UnknownTopic(String),
     Data {
-        payload: Rc<Buffer>,
+        topic_name: String,
+        payload: Arc<Buffer>,
     },
 }

@@ -1,5 +1,4 @@
-use std::io::Read;
-use std::io::{BufRead, BufReader};
+use std::io::{Read, BufRead, BufReader};
 use std::net::TcpStream;
 
 use bufpool;
@@ -52,7 +51,7 @@ impl Iterator for Decoder {
             (cmd.to_string(), it.next().unwrap().to_string())
         };
 
-        Some(match cmd.as_str() {
+        let message = match cmd.as_str() {
             "CREATE" => {
                 IncomingMessage::Create {
                     topic_name: arg,
@@ -78,6 +77,10 @@ impl Iterator for Decoder {
                 }
             },
             _ => unreachable!(),
-        })
+        };
+
+        println!("> {:?}", message);
+
+        Some(message)
     }
 }
