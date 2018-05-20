@@ -62,7 +62,7 @@ impl Iterator for Decoder {
 }
 
 fn parse_message(line: &str) -> IncomingMessage {
-    match parse_command(line).map(|(_, cmd)| cmd) {
+    match command(line).map(|(_, cmd)| cmd) {
         Ok(Command::Create(topic_name)) =>
             IncomingMessage::Create {
                 topic_name: topic_name.to_string(),
@@ -92,39 +92,51 @@ enum Command<'a> {
     Pub(&'a str, u32),
 }
 
-named!(parse_command<&str, Command>, alt_complete!(
-    do_parse!(
-        tag!("PUB") >>
-        topic_name: preceded!(char!(' '), is_not!(" ")) >>
-        size: map_res!(
-            delimited!(char!(' '), digit, tag!("\r\n")),
-            u32::from_str
-        ) >>
-        (Command::Pub(topic_name, size))
-    ) |
-    do_parse!(
-        tag!("SUB") >>
-        topic_name: delimited!(char!(' '), is_not!(" \r"), tag!("\r\n")) >>
-        (Command::Sub(topic_name))
-    ) |
-    do_parse!(
-        tag!("CREATE") >>
-        topic_name: delimited!(char!(' '), is_not!(" \r"), tag!("\r\n")) >>
-        (Command::Create(topic_name))
-    )
+named!(command<&str, Command>, terminated!(
+    switch!(
+        terminated!(command_name, char!(' ')),
+        "PUB" => call!(pub_command) |
+        "SUB" => call!(sub_command) |
+        "CREATE" => call!(create_command)
+    ),
+    tag!("\r\n")
+));
+
+named!(command_name<&str, &str>, take_while!(|c| 'A' <= c && c <= 'Z'));
+
+// CREATE topic-name
+//        ^
+named!(create_command<&str, Command>, do_parse!(
+    topic_name: is_not!(" \r") >>
+    (Command::Create(topic_name))
+));
+
+// SUB topic-name
+//     ^
+named!(sub_command<&str, Command>, do_parse!(
+    topic_name: is_not!(" \r") >>
+    (Command::Sub(topic_name))
+));
+
+// PUB topic-name 42
+//     ^
+named!(pub_command<&str, Command>, do_parse!(
+   topic_name: is_not!(" ") >>
+   size: map_res!(preceded!(char!(' '), digit), u32::from_str) >>
+   (Command::Pub(topic_name, size))
 ));
 
 #[test]
 fn it_parse_pub_command() {
-    assert_eq!(parse_command("PUB topic-name 42\r\n"), Ok(("", Command::Pub("topic-name", 42))));
+    assert_eq!(command("PUB topic-name 42\r\n"), Ok(("", Command::Pub("topic-name", 42))));
 }
 
 #[test]
 fn it_parse_sub_command() {
-    assert_eq!(parse_command("SUB topic-name\r\n"), Ok(("", Command::Sub("topic-name"))));
+    assert_eq!(command("SUB topic-name\r\n"), Ok(("", Command::Sub("topic-name"))));
 }
 
 #[test]
 fn it_parse_create_command() {
-    assert_eq!(parse_command("CREATE topic-name\r\n"), Ok(("", Command::Create("topic-name"))));
+    assert_eq!(command("CREATE topic-name\r\n"), Ok(("", Command::Create("topic-name"))));
 }
