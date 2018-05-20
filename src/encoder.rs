@@ -23,12 +23,16 @@ impl<W: Write> Encoder<W> {
             OutcomingMessage::Ok => {
                 self.writer.write(b"OK\n").unwrap();
             },
-            OutcomingMessage::UnknownTopic(topic) => {
-                self.writer.write(b"UNKNOWN TOPIC: ").unwrap();
-                self.writer.write(topic.as_bytes()).unwrap();
-                self.writer.write(b"\n").unwrap();
+            OutcomingMessage::Err(error) => {
+                self.line.clear();
+
+                write!(&mut self.line, "{}\n", error).unwrap();
+
+                self.writer.write(self.line.as_bytes()).unwrap();
             },
             OutcomingMessage::Data { topic_name, payload } => {
+                self.line.clear();
+
                 write!(&mut self.line, "{} {} ", topic_name, payload.len()).unwrap();
 
                 // TODO: include \n in the buffer to avoid extra syscalls.

@@ -6,6 +6,7 @@ use slab::Slab;
 
 use bufpool::Buffer;
 use protocol::OutcomingMessage;
+use errors::{Error, ErrorKind};
 
 const CLIENTS_CAPACITY: usize = 64;
 const TOPICS_CAPACITY: usize = 32;
@@ -68,7 +69,9 @@ pub fn subscribe(token: &ClientToken, topic_name: &str) {
 
         OutcomingMessage::Ok
     } else {
-        OutcomingMessage::UnknownTopic(topic_name.to_string())
+        let error = Error::from(ErrorKind::UnknownTopic);
+
+        OutcomingMessage::Err(error)
     };
 
     drop(topics);
@@ -98,10 +101,18 @@ pub fn publish(token: &ClientToken, topic_name: &str, payload: Buffer) {
 
         OutcomingMessage::Ok
     } else {
-        OutcomingMessage::UnknownTopic(topic_name.to_string())
+        let error = Error::from(ErrorKind::UnknownTopic);
+
+        OutcomingMessage::Err(error)
     };
 
     drop(topics);
+
+    clients[token.0].sender.send(message).unwrap();
+}
+
+pub fn bypass(token: &ClientToken, message: OutcomingMessage) {
+    let clients = CLIENTS.read().unwrap();
 
     clients[token.0].sender.send(message).unwrap();
 }

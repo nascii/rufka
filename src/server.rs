@@ -7,6 +7,7 @@ use manager::{self, ClientToken};
 use decoder::Decoder;
 use encoder::Encoder;
 use protocol::{IncomingMessage, OutcomingMessage};
+use errors::{Error, ErrorKind};
 
 const PORT: u16 = 3001;
 
@@ -25,6 +26,10 @@ fn reader(stream: TcpStream, token: ClientToken) {
             },
             IncomingMessage::Publish { topic_name, payload } => {
                 manager::publish(&token, &topic_name, payload);
+            },
+            IncomingMessage::Invalid => {
+                let error = Error::from(ErrorKind::InvalidCommand);
+                manager::bypass(&token, OutcomingMessage::Err(error));
             },
         };
     }

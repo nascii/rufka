@@ -1,5 +1,8 @@
 use std::io::{Read, BufRead, BufReader};
 use std::net::TcpStream;
+use std::str::FromStr;
+
+use nom::digit;
 
 use bufpool;
 use protocol::IncomingMessage;
@@ -32,7 +35,7 @@ impl Decoder {
             self.line.trim().is_empty()
         } {}
 
-        self.line.trim()
+        &self.line.trim_left_matches("\r\n")
     }
 }
 
@@ -40,45 +43,88 @@ impl Iterator for Decoder {
     type Item = IncomingMessage;
 
     fn next(&mut self) -> Option<IncomingMessage> {
-        let (cmd, arg) = {
-            let mut it = self.read_line().split_whitespace();
+        let mut message = {
+            let line = self.read_line();
 
-            let cmd = match it.next() {
-                Some(x) => x,
-                None => return None,
-            };
+            if line.is_empty() {
+                return None;
+            }
 
-            (cmd.to_string(), it.next().unwrap().to_string())
+            parse_message(&line)
         };
 
-        let message = match cmd.as_str() {
-            "CREATE" => {
-                IncomingMessage::Create {
-                    topic_name: arg,
-                }
-            },
-            "SUB" => {
-                IncomingMessage::Subscribe {
-                    topic_name: arg,
-                }
-            },
-            "PUB" => {
-                let size: usize = self.read_line().parse().unwrap();
-
-                let mut buffer = bufpool::get_buffer(size);
-
-                debug_assert!(buffer.len() == size);
-
-                self.reader.read_exact(&mut buffer).unwrap();
-
-                IncomingMessage::Publish {
-                    topic_name: arg,
-                    payload: buffer,
-                }
-            },
-            _ => unreachable!(),
-        };
+        if let IncomingMessage::Publish { ref mut payload, .. } = message {
+            self.reader.read_exact(payload).unwrap();
+        }
 
         Some(message)
     }
+}
+
+fn parse_message(line: &str) -> IncomingMessage {
+    match parse_command(line).map(|(_, cmd)| cmd) {
+        Ok(Command::Create(topic_name)) =>
+            IncomingMessage::Create {
+                topic_name: topic_name.to_string(),
+            },
+        Ok(Command::Sub(topic_name)) =>
+            IncomingMessage::Subscribe {
+                topic_name: topic_name.to_string(),
+            },
+        Ok(Command::Pub(topic_name, size)) => {
+            let mut buffer = bufpool::get_buffer(size as usize);
+
+            debug_assert!(buffer.len() as u32 == size);
+
+            IncomingMessage::Publish {
+                topic_name: topic_name.to_string(),
+                payload: buffer,
+            }
+        },
+        Err(_) => IncomingMessage::Invalid,
+    }
+}
+
+#[derive(Debug, PartialEq)]
+enum Command<'a> {
+    Create(&'a str),
+    Sub(&'a str),
+    Pub(&'a str, u32),
+}
+
+named!(parse_command<&str, Command>, alt_complete!(
+    do_parse!(
+        tag!("PUB") >>
+        topic_name: preceded!(char!(' '), is_not!(" ")) >>
+        size: map_res!(
+            delimited!(char!(' '), digit, tag!("\r\n")),
+            u32::from_str
+        ) >>
+        (Command::Pub(topic_name, size))
+    ) |
+    do_parse!(
+        tag!("SUB") >>
+        topic_name: delimited!(char!(' '), is_not!(" \r"), tag!("\r\n")) >>
+        (Command::Sub(topic_name))
+    ) |
+    do_parse!(
+        tag!("CREATE") >>
+        topic_name: delimited!(char!(' '), is_not!(" \r"), tag!("\r\n")) >>
+        (Command::Create(topic_name))
+    )
+));
+
+#[test]
+fn it_parse_pub_command() {
+    assert_eq!(parse_command("PUB topic-name 42\r\n"), Ok(("", Command::Pub("topic-name", 42))));
+}
+
+#[test]
+fn it_parse_sub_command() {
+    assert_eq!(parse_command("SUB topic-name\r\n"), Ok(("", Command::Sub("topic-name"))));
+}
+
+#[test]
+fn it_parse_create_command() {
+    assert_eq!(parse_command("CREATE topic-name\r\n"), Ok(("", Command::Create("topic-name"))));
 }

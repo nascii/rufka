@@ -1,20 +1,20 @@
 /*
-   CREATE <topic_name>\n
+   CREATE <topic>\n
 
-   SUB <topic_name>\n
+   SUB <topic>\n
 
-   <size><payload>\n
-
-   PUB <topic_name>\n
-   <size>\n
+   PUB <topic> <size>\n
    <msg>\n
-   <size>\n
-   <msg>\n
+
+   ---
+
+   <topic> <size> <payload>\n
 */
 
 use std::sync::Arc;
 
 use bufpool::Buffer;
+use errors::Error;
 
 #[derive(Debug)]
 pub enum IncomingMessage {
@@ -28,12 +28,13 @@ pub enum IncomingMessage {
         topic_name: String,
         payload: Buffer,
     },
+    Invalid,
 }
 
 #[derive(Debug)]
 pub enum OutcomingMessage {
     Ok,
-    UnknownTopic(String),
+    Err(Error),
     Data {
         topic_name: String,
         payload: Arc<Buffer>,
