@@ -15,8 +15,20 @@ lazy_static! {
     static ref CLIENTS: RwLock<Slab<Client>> =
         RwLock::new(Slab::with_capacity(CLIENTS_CAPACITY));
 
-    static ref TOPICS: RwLock<HashMap<String, Vec<ClientToken>>> =
+    static ref TOPICS: RwLock<HashMap<String, Topic>> =
         RwLock::new(HashMap::with_capacity(TOPICS_CAPACITY));
+}
+
+struct Topic {
+    clients: Vec<ClientToken>,
+}
+
+impl Topic {
+    fn new() -> Topic {
+        Topic {
+            clients: Vec::with_capacity(1),
+        }
+    }
 }
 
 #[derive(Debug, PartialEq)]
@@ -53,7 +65,7 @@ pub fn create(token: &ClientToken, topic_name: String) {
     {
         let mut topics = TOPICS.write().unwrap();
 
-        topics.entry(topic_name).or_insert_with(Vec::new);
+        topics.entry(topic_name).or_insert_with(Topic::new);
     }
 
     let clients = CLIENTS.read().unwrap();
@@ -65,7 +77,7 @@ pub fn subscribe(token: &ClientToken, topic_name: &str) {
     let mut topics = TOPICS.write().unwrap();
 
     let message = if let Some(topic) = topics.get_mut(topic_name) {
-        topic.push(token.clone());
+        topic.clients.push(token.clone());
 
         OutcomingMessage::Ok
     } else {
@@ -90,7 +102,7 @@ pub fn publish(token: &ClientToken, topic_name: &str, payload: Buffer) {
     let message = if let Some(topic) = topics.get(topic_name) {
         let buffer = Arc::new(payload);
 
-        for token in topic {
+        for token in &topic.clients {
             let message = OutcomingMessage::Data {
                 topic_name: topic_name.to_string(),
                 payload: buffer.clone(),
@@ -127,9 +139,9 @@ pub fn disconnect(token: ClientToken) {
     let mut topics = TOPICS.write().unwrap();
 
     for topic_name in client.subscriptions {
+        let topic = topics.get_mut(&topic_name).unwrap();
+
         // TODO: use `swap_remove` instead.
-        topics.get_mut(&topic_name)
-            .unwrap()
-            .retain(|stored| stored != &token);
+        topic.clients.retain(|stored| stored != &token);
     }
 }
