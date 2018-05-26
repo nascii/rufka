@@ -1,63 +1,131 @@
-use std::thread;
-use std::net::{TcpListener, TcpStream};
+use std::sync::Arc;
 
-use crossbeam_channel::Receiver;
+use tokio;
+use tokio::net::{TcpListener, TcpStream};
+use tokio::prelude::*;
 
-use manager::{self, ClientToken};
-use decoder::Decoder;
-use encoder::Encoder;
+use codec::TextCodec;
+use errors::Error;
+use peer::Peer;
 use protocol::{IncomingMessage, OutcomingMessage};
-use errors::{Error, ErrorKind};
+use state::State;
+use topic::Topic;
 
-const PORT: u16 = 3001;
+fn process(stream: TcpStream, state: Arc<State>) {
+    let addr = stream.peer_addr().unwrap();
 
-fn reader(stream: TcpStream, token: ClientToken) {
-    println!("Connected: {:?}", token);
+    println!("{}: connected", addr);
 
-    for message in Decoder::new(stream) {
-        println!("< {:?}", message);
+    let (writer, reader) = stream.framed(TextCodec::new()).split();
+
+    let (peer, rx) = Peer::new(addr);
+
+    let peer = Arc::new(peer);
+
+    let receiving = receiver(state.clone(), reader, peer.clone());
+    let sending = sender(state.clone(), rx, writer, peer.clone());
+
+    let connection = receiving.select(sending).then(move |_| {
+        let mut topics = state.topics.write();
+
+        for topic_name in peer.unsubscribe_all() {
+            if let Some(topic) = topics.get_mut(&topic_name) {
+                topic.unsubscribe(&peer);
+            }
+        }
+
+        println!("{}: disconnected", addr);
+        Ok(())
+    });
+
+    tokio::spawn(connection);
+}
+
+// TODO: stream buffering.
+
+fn receiver(
+    state: Arc<State>,
+    reader: impl Stream<Item = IncomingMessage, Error = Error>,
+    peer: Arc<Peer>,
+) -> impl Future<Item = (), Error = ()> {
+    let reader = reader
+        .inspect_err(|err| println!("{}", err))
+        .map_err(|_| ());
+
+    reader.for_each(move |message| {
+        println!("> {}: {:?}", peer.addr, message);
 
         match message {
+            IncomingMessage::Publish {
+                topic_name,
+                payload,
+            } => {
+                let mut topics = state.topics.read();
+
+                let response = if let Some(topic) = topics.get(&topic_name) {
+                    topic.send(payload);
+
+                    OutcomingMessage::Ok
+                } else {
+                    OutcomingMessage::UnknownTopic
+                };
+
+                peer.send(response);
+            }
             IncomingMessage::Create { topic_name } => {
-                manager::create(&token, topic_name);
-            },
+                state
+                    .topics
+                    .write()
+                    .entry(topic_name.clone())
+                    .or_insert_with(|| Topic::new(topic_name));
+
+                peer.send(OutcomingMessage::Ok);
+            }
             IncomingMessage::Subscribe { topic_name } => {
-                manager::subscribe(&token, &topic_name);
-            },
-            IncomingMessage::Publish { topic_name, payload } => {
-                manager::publish(&token, &topic_name, payload);
-            },
-            IncomingMessage::Invalid => {
-                let error = Error::from(ErrorKind::InvalidCommand);
-                manager::bypass(&token, OutcomingMessage::Err(error));
-            },
+                let mut topics = state.topics.write();
+
+                let response = if let Some(topic) = topics.get_mut(&topic_name) {
+                    topic.subscribe(peer.clone());
+                    peer.subscribe(topic_name);
+
+                    OutcomingMessage::Ok
+                } else {
+                    OutcomingMessage::UnknownTopic
+                };
+
+                peer.send(response);
+            }
         };
-    }
 
-    println!("Disconnected: {:?}", token);
-
-    manager::disconnect(token);
+        Ok(())
+    })
 }
 
-fn writer(stream: TcpStream, receiver: Receiver<OutcomingMessage>) {
-    let mut encoder = Encoder::new(stream);
-
-    for message in receiver {
-        println!("> {:?}", message);
-        encoder.write(message);
-    }
+fn sender(
+    _state: Arc<State>,
+    rx: impl Stream<Item = OutcomingMessage, Error = ()>,
+    writer: impl Sink<SinkItem = OutcomingMessage, SinkError = Error>,
+    peer: Arc<Peer>,
+) -> impl Future<Item = (), Error = ()> {
+    writer
+        .sink_map_err(|err| eprintln!("{}", err))
+        .send_all(rx.inspect(move |message| println!("< {}: {:?}", peer.addr, message)))
+        .map(|_| ())
 }
 
-pub fn run() {
-    let socket = TcpListener::bind(("127.0.0.1", PORT)).unwrap();
+pub fn create() -> impl Future<Item = (), Error = ()> {
+    let addr = "127.0.0.1:3001".parse().unwrap();
 
-    for stream in socket.incoming() {
-        let (token, receiver) = manager::connect();
+    let socket = TcpListener::bind(&addr).unwrap();
+    println!("Listening on: {}", addr);
 
-        let stream = stream.unwrap();
-        let writable = stream.try_clone().unwrap();
+    let state = Arc::new(State::new());
 
-        thread::spawn(move || reader(stream, token));
-        thread::spawn(move || writer(writable, receiver));
-    }
+    socket
+        .incoming()
+        .map_err(|e| eprintln!("Failed to accept socket: {:?}", e))
+        .for_each(move |stream| {
+            process(stream, state.clone());
+            Ok(())
+        })
 }

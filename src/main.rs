@@ -1,20 +1,23 @@
 #[macro_use]
-extern crate lazy_static;
-extern crate crossbeam_channel;
-extern crate slab;
+extern crate error_chain;
+extern crate parking_lot;
 #[macro_use]
 extern crate nom;
-#[macro_use]
-extern crate failure;
+extern crate bytes;
+extern crate futures;
+extern crate tokio;
+extern crate tokio_io;
 
-mod bufpool;
+mod codec;
+mod errors;
+mod peer;
 mod protocol;
 mod server;
-mod decoder;
-mod encoder;
-mod manager;
-mod errors;
+mod state;
+mod topic;
 
 fn main() {
-    server::run();
+    let srv = server::create();
+
+    tokio::run(srv);
 }
