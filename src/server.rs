@@ -25,6 +25,8 @@ fn process(stream: TcpStream, state: Arc<State>) {
     let receiving = receiver(state.clone(), reader, peer.clone());
     let sending = sender(state.clone(), rx, writer, peer.clone());
 
+    // TODO: wait last message before closing.
+
     let connection = receiving.select(sending).then(move |_| {
         let mut topics = state.topics.write();
 
@@ -48,9 +50,15 @@ fn receiver(
     reader: impl Stream<Item = IncomingMessage, Error = Error>,
     peer: Arc<Peer>,
 ) -> impl Future<Item = (), Error = ()> {
-    let reader = reader
-        .inspect_err(|err| println!("{}", err))
-        .map_err(|_| ());
+    let peer_clone = peer.clone();
+
+    let reader = reader.map_err(move |_| {
+        let message = OutcomingMessage::InvalidCommand;
+        println!("> {}: {:?}", peer_clone.addr, message);
+
+        peer_clone.send(message);
+        ()
+    });
 
     reader.for_each(move |message| {
         println!("> {}: {:?}", peer.addr, message);
