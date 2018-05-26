@@ -12,6 +12,8 @@ use protocol::{IncomingMessage, OutcomingMessage};
  *
  * SUB <topic>\r\n
  *
+ * UNSUB <topic>\r\n
+ *
  * PUB <topic> <size>\r\n<payload>\r\n
  *
  * ---
@@ -114,6 +116,11 @@ impl Decoder for TextCodec {
                         topic_name: Bytes::from(topic_name),
                     }))
                 }
+                Command::Unsub(topic_name) => {
+                    return Ok(Some(IncomingMessage::Unsubscribe {
+                        topic_name: Bytes::from(topic_name),
+                    }))
+                }
                 Command::Pub(topic_name, size) => {
                     self.topic_name = Some(Bytes::from(topic_name));
                     self.payload_size = size as usize;
@@ -140,6 +147,7 @@ impl Decoder for TextCodec {
 enum Command<'a> {
     Create(&'a str),
     Sub(&'a str),
+    Unsub(&'a str),
     Pub(&'a str, u32),
 }
 
@@ -148,6 +156,7 @@ named!(command<&str, Command>, terminated!(
         terminated!(command_name, char!(' ')),
         "PUB" => call!(pub_command) |
         "SUB" => call!(sub_command) |
+        "UNSUB" => call!(unsub_command) |
         "CREATE" => call!(create_command)
     ),
     tag!("\r\n")
@@ -167,6 +176,13 @@ named!(create_command<&str, Command>, do_parse!(
 named!(sub_command<&str, Command>, do_parse!(
     topic_name: is_not!(" \r") >>
     (Command::Sub(topic_name))
+));
+
+// UNSUB topic-name
+//     ^
+named!(unsub_command<&str, Command>, do_parse!(
+    topic_name: is_not!(" \r") >>
+    (Command::Unsub(topic_name))
 ));
 
 // PUB topic-name 42
@@ -190,6 +206,14 @@ fn it_parse_sub_command() {
     assert_eq!(
         command("SUB topic-name\r\n"),
         Ok(("", Command::Sub("topic-name")))
+    );
+}
+
+#[test]
+fn it_parse_unsub_command() {
+    assert_eq!(
+        command("UNSUB topic-name\r\n"),
+        Ok(("", Command::Unsub("topic-name")))
     );
 }
 

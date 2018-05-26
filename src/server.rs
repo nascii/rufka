@@ -103,6 +103,20 @@ fn receiver(
 
                 peer.send(response);
             }
+            IncomingMessage::Unsubscribe { topic_name } => {
+                let mut topics = state.topics.write();
+
+                let response = if let Some(topic) = topics.get_mut(&topic_name) {
+                    topic.unsubscribe(&peer);
+                    peer.unsubscribe(&topic_name);
+
+                    OutcomingMessage::Ok
+                } else {
+                    OutcomingMessage::UnknownTopic
+                };
+
+                peer.send(response);
+            }
         };
 
         Ok(())

@@ -17,6 +17,7 @@ use bytes::Bytes;
 pub enum IncomingMessage {
     Create { topic_name: Bytes },
     Subscribe { topic_name: Bytes },
+    Unsubscribe { topic_name: Bytes },
     Publish { topic_name: Bytes, payload: Bytes },
 }
 
