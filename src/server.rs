@@ -4,10 +4,10 @@ use tokio;
 use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
 
-use codec::TextCodec;
-use errors::Error;
+use codec::Codec;
+use errors::{Error, ResultExt};
 use peer::Peer;
-use protocol::{IncomingMessage, OutcomingMessage};
+use protocol::{Exchange, Message, Request, Response, Transaction};
 use state::State;
 use topic::Topic;
 
@@ -16,7 +16,7 @@ fn process(stream: TcpStream, state: Arc<State>) {
 
     println!("{}: connected", addr);
 
-    let (writer, reader) = stream.framed(TextCodec::new()).split();
+    let (writer, reader) = stream.framed(Codec::new()).split();
 
     let (peer, rx) = Peer::new(addr);
 
@@ -25,13 +25,13 @@ fn process(stream: TcpStream, state: Arc<State>) {
     let receiving = receiver(state.clone(), reader, peer.clone());
     let sending = sender(state.clone(), rx, writer, peer.clone());
 
-    // TODO: wait last message before closing.
+    // TODO: wait last transaction before closing.
 
     let connection = receiving.select(sending).then(move |_| {
         let mut topics = state.topics.write();
 
-        for topic_name in peer.unsubscribe_all() {
-            if let Some(topic) = topics.get_mut(&topic_name) {
+        for topic in peer.unsubscribe_all() {
+            if let Some(topic) = topics.get_mut(&topic) {
                 topic.unsubscribe(&peer);
             }
         }
@@ -47,75 +47,107 @@ fn process(stream: TcpStream, state: Arc<State>) {
 
 fn receiver(
     state: Arc<State>,
-    reader: impl Stream<Item = IncomingMessage, Error = Error>,
+    reader: impl Stream<Item = Transaction, Error = Error>,
     peer: Arc<Peer>,
 ) -> impl Future<Item = (), Error = ()> {
     let peer_clone = peer.clone();
 
     let reader = reader.map_err(move |_| {
-        let message = OutcomingMessage::InvalidCommand;
-        println!("> {}: {:?}", peer_clone.addr, message);
+        let transaction = Transaction {
+            correlation: 0,
+            exchange: Exchange::Response(Response::InvalidCommand),
+        };
 
-        peer_clone.send(message);
+        println!("> {}: {:?}", peer_clone.addr, transaction);
+
+        peer_clone.send(transaction);
         ()
     });
 
-    reader.for_each(move |message| {
-        println!("> {}: {:?}", peer.addr, message);
+    reader.for_each(move |transaction| {
+        println!("> {}: {:?}", peer.addr, transaction);
 
-        match message {
-            IncomingMessage::Publish {
-                topic_name,
-                payload,
-            } => {
+        let correlation = transaction.correlation;
+
+        let request = if let Exchange::Request(request) = transaction.exchange {
+            request
+        } else {
+            // TODO: logging.
+            return Ok(());
+        };
+
+        match request {
+            Request::Publish { topic, key, value } => {
                 let mut topics = state.topics.read();
 
-                let response = if let Some(topic) = topics.get(&topic_name) {
-                    topic.send(payload);
+                let response = if let Some(topic) = topics.get(&topic) {
+                    topic.send(Message {
+                        offset: 0,
+                        key,
+                        value,
+                    });
 
-                    OutcomingMessage::Ok
+                    Response::Ok
                 } else {
-                    OutcomingMessage::UnknownTopic
+                    Response::UnknownTopic
                 };
 
-                peer.send(response);
+                peer.send(Transaction {
+                    correlation,
+                    exchange: Exchange::Response(response),
+                });
             }
-            IncomingMessage::Create { topic_name } => {
+            Request::Create { topic } => {
                 state
                     .topics
                     .write()
-                    .entry(topic_name.clone())
-                    .or_insert_with(|| Topic::new(topic_name));
+                    .entry(topic.clone())
+                    .or_insert_with(|| Topic::new(topic));
 
-                peer.send(OutcomingMessage::Ok);
+                peer.send(Transaction {
+                    correlation,
+                    exchange: Exchange::Response(Response::Ok),
+                });
             }
-            IncomingMessage::Subscribe { topic_name } => {
+            Request::Subscribe { topic: topic_name } => {
                 let mut topics = state.topics.write();
 
                 let response = if let Some(topic) = topics.get_mut(&topic_name) {
-                    topic.subscribe(peer.clone());
+                    topic.subscribe(peer.clone(), correlation);
                     peer.subscribe(topic_name);
 
-                    OutcomingMessage::Ok
+                    Response::Ok
                 } else {
-                    OutcomingMessage::UnknownTopic
+                    Response::UnknownTopic
                 };
 
-                peer.send(response);
+                peer.send(Transaction {
+                    correlation,
+                    exchange: Exchange::Response(response),
+                });
             }
-            IncomingMessage::Unsubscribe { topic_name } => {
+            Request::Unsubscribe { topic: topic_name } => {
                 let mut topics = state.topics.write();
 
                 let response = if let Some(topic) = topics.get_mut(&topic_name) {
                     topic.unsubscribe(&peer);
                     peer.unsubscribe(&topic_name);
 
-                    OutcomingMessage::Ok
+                    Response::Ok
                 } else {
-                    OutcomingMessage::UnknownTopic
+                    Response::UnknownTopic
                 };
 
-                peer.send(response);
+                peer.send(Transaction {
+                    correlation,
+                    exchange: Exchange::Response(response),
+                });
+            }
+            Request::Ping => {
+                peer.send(Transaction {
+                    correlation,
+                    exchange: Exchange::Response(Response::Ok),
+                });
             }
         };
 
@@ -125,13 +157,13 @@ fn receiver(
 
 fn sender(
     _state: Arc<State>,
-    rx: impl Stream<Item = OutcomingMessage, Error = ()>,
-    writer: impl Sink<SinkItem = OutcomingMessage, SinkError = Error>,
+    rx: impl Stream<Item = Transaction, Error = ()>,
+    writer: impl Sink<SinkItem = Transaction, SinkError = Error>,
     peer: Arc<Peer>,
 ) -> impl Future<Item = (), Error = ()> {
     writer
         .sink_map_err(|err| eprintln!("{}", err))
-        .send_all(rx.inspect(move |message| println!("< {}: {:?}", peer.addr, message)))
+        .send_all(rx.inspect(move |transaction| println!("< {}: {:?}", peer.addr, transaction)))
         .map(|_| ())
 }
 

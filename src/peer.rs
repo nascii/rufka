@@ -5,16 +5,16 @@ use bytes::Bytes;
 use futures::sync::mpsc::{self, UnboundedReceiver, UnboundedSender};
 use parking_lot::Mutex;
 
-use protocol::OutcomingMessage;
+use protocol::Transaction;
 
 pub struct Peer {
     pub addr: SocketAddr,
-    sender: UnboundedSender<OutcomingMessage>,
+    sender: UnboundedSender<Transaction>,
     subscriptions: Mutex<Vec<Bytes>>,
 }
 
 impl Peer {
-    pub fn new(addr: SocketAddr) -> (Peer, UnboundedReceiver<OutcomingMessage>) {
+    pub fn new(addr: SocketAddr) -> (Peer, UnboundedReceiver<Transaction>) {
         let (sender, receiver) = mpsc::unbounded();
 
         let peer = Peer {
@@ -44,7 +44,7 @@ impl Peer {
         mem::replace(&mut *subscriptions, Vec::new())
     }
 
-    pub fn send(&self, message: OutcomingMessage) {
-        self.sender.unbounded_send(message).unwrap()
+    pub fn send(&self, transaction: Transaction) {
+        self.sender.unbounded_send(transaction).unwrap()
     }
 }

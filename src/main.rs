@@ -2,13 +2,14 @@
 extern crate structopt;
 #[macro_use]
 extern crate error_chain;
-extern crate parking_lot;
-#[macro_use]
-extern crate nom;
 extern crate bytes;
 extern crate futures;
+extern crate parking_lot;
 extern crate tokio;
 extern crate tokio_io;
+#[macro_use]
+extern crate serde_derive;
+extern crate bincode;
 
 mod cli;
 mod codec;

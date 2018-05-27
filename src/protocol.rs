@@ -1,30 +1,64 @@
-/*
-   CREATE <topic>\n
-
-   SUB <topic>\n
-
-   PUB <topic> <size>\n
-   <msg>\n
-
-   ---
-
-   <topic> <size> <payload>\n
-*/
-
+use bincode::{self, Config};
 use bytes::Bytes;
 
-#[derive(Debug)]
-pub enum IncomingMessage {
-    Create { topic_name: Bytes },
-    Subscribe { topic_name: Bytes },
-    Unsubscribe { topic_name: Bytes },
-    Publish { topic_name: Bytes, payload: Bytes },
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Container {
+    pub size: i32,
+    pub transaction: Transaction,
 }
 
-#[derive(Debug)]
-pub enum OutcomingMessage {
+#[derive(Serialize, Deserialize, Debug)]
+pub struct Transaction {
+    pub correlation: CorrelationId,
+    pub exchange: Exchange,
+}
+
+pub type CorrelationId = i32;
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Exchange {
+    Request(Request),
+    Response(Response),
+    Message(Message),
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Request {
+    Ping,
+    Create {
+        topic: Bytes,
+    },
+    Subscribe {
+        topic: Bytes,
+    },
+    Unsubscribe {
+        topic: Bytes,
+    },
+    Publish {
+        topic: Bytes,
+        key: Bytes,
+        value: Bytes,
+    },
+}
+
+#[derive(Serialize, Deserialize, Debug)]
+pub enum Response {
     Ok,
     InvalidCommand,
     UnknownTopic,
-    Data { topic_name: Bytes, payload: Bytes },
+}
+
+#[derive(Serialize, Deserialize, Debug, Clone)]
+pub struct Message {
+    pub offset: i64,
+    pub key: Bytes,
+    pub value: Bytes,
+}
+
+pub fn config() -> Config {
+    let mut config = bincode::config();
+
+    config.limit(i32::max_value() as u64).big_endian();
+
+    return config;
 }

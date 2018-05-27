@@ -3,12 +3,14 @@ name = "rufka"
 version = "0.1.0"
 
 [dependencies]
-nom = "4.0.0"
 tokio = "0.1.6"
 tokio-io = "0.1.6"
 futures = "0.1"
 parking_lot = "0.5.5"
-bytes = "0.4.7"
+bytes = { version = "0.4.7", features = ["serde"] }
 error-chain = "0.11.0"
 structopt = "0.2.8"
+serde_derive = "1.0.62"
+bincode = "1.0.0"
+serde = "1.0.62"
 
