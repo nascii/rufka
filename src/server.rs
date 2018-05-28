@@ -5,7 +5,7 @@ use tokio::net::{TcpListener, TcpStream};
 use tokio::prelude::*;
 
 use codec::Codec;
-use errors::{Error, ResultExt};
+use errors::Error;
 use peer::Peer;
 use protocol::{Exchange, Message, Request, Response, Transaction};
 use state::State;
@@ -162,12 +162,12 @@ fn sender(
     peer: Arc<Peer>,
 ) -> impl Future<Item = (), Error = ()> {
     writer
-        .sink_map_err(|err| eprintln!("{}", err))
+        .sink_map_err(|err| eprintln!("Failed to write: {}", err))
         .send_all(rx.inspect(move |transaction| println!("< {}: {:?}", peer.addr, transaction)))
         .map(|_| ())
 }
 
-pub fn create() -> impl Future<Item = (), Error = ()> {
+pub fn start() {
     let addr = "127.0.0.1:3001".parse().unwrap();
 
     let socket = TcpListener::bind(&addr).unwrap();
@@ -175,11 +175,13 @@ pub fn create() -> impl Future<Item = (), Error = ()> {
 
     let state = Arc::new(State::new());
 
-    socket
+    let server = socket
         .incoming()
         .map_err(|e| eprintln!("Failed to accept socket: {:?}", e))
         .for_each(move |stream| {
             process(stream, state.clone());
             Ok(())
-        })
+        });
+
+    tokio::run(server);
 }

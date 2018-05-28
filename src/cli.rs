@@ -1,8 +1,8 @@
 use std::path::PathBuf;
 
 use structopt::StructOpt;
-use tokio;
 
+use client;
 use server;
 
 #[derive(StructOpt, Debug)]
@@ -42,14 +42,14 @@ struct StopCommand {}
 struct StatusCommand {}
 
 fn start(common: Common, command: StartCommand) {
-    let srv = server::create();
-
-    tokio::run(srv);
+    server::start();
 }
 
 fn stop(common: Common, command: StopCommand) {}
 
-fn status(common: Common, command: StatusCommand) {}
+fn status(common: Common, command: StatusCommand) {
+    client::status();
+}
 
 pub fn init() {
     let CLI { common, command } = CLI::from_args();

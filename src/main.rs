@@ -12,6 +12,7 @@ extern crate serde_derive;
 extern crate bincode;
 
 mod cli;
+mod client;
 mod codec;
 mod errors;
 mod peer;
