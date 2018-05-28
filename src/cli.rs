@@ -25,9 +25,6 @@ enum Command {
     #[structopt(name = "start")]
     Start(StartCommand),
 
-    #[structopt(name = "start")]
-    Stop(StopCommand),
-
     #[structopt(name = "status")]
     Status(StatusCommand),
 }
@@ -36,16 +33,11 @@ enum Command {
 struct StartCommand {}
 
 #[derive(StructOpt, Debug)]
-struct StopCommand {}
-
-#[derive(StructOpt, Debug)]
 struct StatusCommand {}
 
 fn start(common: Common, command: StartCommand) {
     server::start();
 }
-
-fn stop(common: Common, command: StopCommand) {}
 
 fn status(common: Common, command: StatusCommand) {
     client::status();
@@ -56,7 +48,6 @@ pub fn init() {
 
     match command {
         Command::Start(cmd) => start(common, cmd),
-        Command::Stop(cmd) => stop(common, cmd),
         Command::Status(cmd) => status(common, cmd),
     }
 }
