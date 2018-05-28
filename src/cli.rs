@@ -33,6 +33,9 @@ enum Command {
 
     #[structopt(name = "publish")]
     Publish(PublishCommand),
+
+    #[structopt(name = "subscribe")]
+    Subscribe(SubscribeCommand),
 }
 
 #[derive(StructOpt, Debug)]
@@ -53,6 +56,11 @@ struct PublishCommand {
     key: String,
 }
 
+#[derive(StructOpt, Debug)]
+struct SubscribeCommand {
+    topic: String,
+}
+
 fn start(_common: Common, _command: StartCommand) {
     server::start();
 }
@@ -69,6 +77,10 @@ fn publish(_common: Common, command: PublishCommand) {
     client::publish(command.topic, command.key);
 }
 
+fn subscribe(_common: Common, command: SubscribeCommand) {
+    client::subscribe(command.topic);
+}
+
 pub fn init() {
     let CLI { common, command } = CLI::from_args();
 
@@ -77,5 +89,6 @@ pub fn init() {
         Command::Status(cmd) => status(common, cmd),
         Command::Create(cmd) => create(common, cmd),
         Command::Publish(cmd) => publish(common, cmd),
+        Command::Subscribe(cmd) => subscribe(common, cmd),
     }
 }

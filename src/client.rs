@@ -109,10 +109,54 @@ pub fn publish(topic: String, key: String) {
 
     match recv(&stream) {
         Exchange::Response(Response::Ok) => println!("Ok"),
-        Exchange::Response(Response::UnknownTopic) => println!("Unknown topic"),
+        Exchange::Response(Response::UnknownTopic) => {
+            eprintln!("Unknown topic");
+            exit(1);
+        }
         exchange => {
             eprintln!("Invalid exchange: {:#?}", exchange);
             exit(1);
+        }
+    }
+}
+
+pub fn subscribe(topic: String) {
+    let stream = connect();
+
+    let request = Request::Subscribe {
+        topic: topic.into(),
+    };
+
+    send(&stream, Exchange::Request(request));
+
+    match recv(&stream) {
+        Exchange::Response(Response::Ok) => println!("Ok"),
+        exchange => {
+            eprintln!("Invalid exchange: {:#?}", exchange);
+            exit(1);
+        }
+    }
+
+    let stdout = io::stdout();
+    let mut handle = stdout.lock();
+
+    loop {
+        match recv(&stream) {
+            Exchange::Message(message) => {
+                write!(handle, "{}\t", message.offset).unwrap();
+                handle.write(&message.key).unwrap();
+                handle.write(b"\t").unwrap();
+                handle.write(&message.value).unwrap();
+                handle.write(b"\n").unwrap();
+            }
+            Exchange::Response(Response::UnknownTopic) => {
+                eprintln!("Unknown topic");
+                exit(1);
+            }
+            exchange => {
+                eprintln!("Invalid exchange: {:#?}", exchange);
+                exit(1);
+            }
         }
     }
 }
