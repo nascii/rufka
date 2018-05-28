@@ -28,6 +28,9 @@ enum Command {
     #[structopt(name = "status")]
     Status(StatusCommand),
 
+    #[structopt(name = "create")]
+    Create(CreateCommand),
+
     #[structopt(name = "publish")]
     Publish(PublishCommand),
 }
@@ -37,6 +40,11 @@ struct StartCommand {}
 
 #[derive(StructOpt, Debug)]
 struct StatusCommand {}
+
+#[derive(StructOpt, Debug)]
+struct CreateCommand {
+    topic: String,
+}
 
 #[derive(StructOpt, Debug)]
 struct PublishCommand {
@@ -53,6 +61,10 @@ fn status(_common: Common, _command: StatusCommand) {
     client::status();
 }
 
+fn create(_common: Common, command: CreateCommand) {
+    client::create(command.topic);
+}
+
 fn publish(_common: Common, command: PublishCommand) {
     client::publish(command.topic, command.key);
 }
@@ -63,6 +75,7 @@ pub fn init() {
     match command {
         Command::Start(cmd) => start(common, cmd),
         Command::Status(cmd) => status(common, cmd),
+        Command::Create(cmd) => create(common, cmd),
         Command::Publish(cmd) => publish(common, cmd),
     }
 }

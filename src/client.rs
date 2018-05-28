@@ -74,6 +74,24 @@ pub fn status() {
     }
 }
 
+pub fn create(topic: String) {
+    let stream = connect();
+
+    let request = Request::Create {
+        topic: topic.into(),
+    };
+
+    send(&stream, Exchange::Request(request));
+
+    match recv(&stream) {
+        Exchange::Response(Response::Ok) => println!("Ok"),
+        exchange => {
+            eprintln!("Invalid exchange: {:#?}", exchange);
+            exit(1);
+        }
+    }
+}
+
 pub fn publish(topic: String, key: String) {
     let stream = connect();
 
