@@ -6,6 +6,7 @@ use peer::Peer;
 use protocol::{CorrelationId, Exchange, Message, Transaction};
 
 pub struct Topic {
+    _name: Bytes,
     subscribers: Vec<Subscriber>,
 }
 
@@ -15,8 +16,9 @@ struct Subscriber {
 }
 
 impl Topic {
-    pub fn new(_name: Bytes) -> Topic {
+    pub fn new(name: Bytes) -> Topic {
         Topic {
+            _name: name,
             subscribers: Vec::new(),
         }
     }
@@ -35,7 +37,7 @@ impl Topic {
         }
     }
 
-    pub fn send(&self, message: Message) {
+    pub fn send(&self, message: &Message) {
         for subscriber in &self.subscribers {
             subscriber.peer.send(Transaction {
                 correlation: subscriber.correlation,

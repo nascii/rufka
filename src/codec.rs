@@ -28,7 +28,7 @@ impl Encoder for Codec {
 
         let container = Container {
             size: size as i32,
-            transaction: transaction,
+            transaction,
         };
 
         buffer.reserve(size + 4);

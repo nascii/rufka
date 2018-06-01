@@ -8,9 +8,5 @@ error_chain! {
         Bincode(bincode::Error);
     }
 
-    errors {
-        InvalidCommand {
-            description("Invalid command"),
-        }
-    }
+    // TODO: wrap into custom errors.
 }

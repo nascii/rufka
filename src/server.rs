@@ -23,7 +23,7 @@ fn process(stream: TcpStream, state: Arc<State>) {
     let peer = Arc::new(peer);
 
     let receiving = receiver(state.clone(), reader, peer.clone());
-    let sending = sender(state.clone(), rx, writer, peer.clone());
+    let sending = sender(rx, writer, peer.clone());
 
     // TODO: wait last transaction before closing.
 
@@ -81,7 +81,7 @@ fn receiver(
                 let mut topics = state.topics.read();
 
                 let response = if let Some(topic) = topics.get(&topic) {
-                    topic.send(Message {
+                    topic.send(&Message {
                         offset: 0,
                         key,
                         value,
@@ -156,7 +156,6 @@ fn receiver(
 }
 
 fn sender(
-    _state: Arc<State>,
     rx: impl Stream<Item = Transaction, Error = ()>,
     writer: impl Sink<SinkItem = Transaction, SinkError = Error>,
     peer: Arc<Peer>,

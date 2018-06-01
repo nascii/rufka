@@ -60,5 +60,5 @@ pub fn config() -> Config {
 
     config.limit(i32::max_value() as u64).big_endian();
 
-    return config;
+    config
 }

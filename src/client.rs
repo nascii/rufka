@@ -144,10 +144,10 @@ pub fn subscribe(topic: String) {
         match recv(&stream) {
             Exchange::Message(message) => {
                 write!(handle, "{}\t", message.offset).unwrap();
-                handle.write(&message.key).unwrap();
-                handle.write(b"\t").unwrap();
-                handle.write(&message.value).unwrap();
-                handle.write(b"\n").unwrap();
+                handle.write_all(&message.key).unwrap();
+                handle.write_all(b"\t").unwrap();
+                handle.write_all(&message.value).unwrap();
+                handle.write_all(b"\n").unwrap();
             }
             Exchange::Response(Response::UnknownTopic) => {
                 eprintln!("Unknown topic");

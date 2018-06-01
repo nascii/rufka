@@ -1,3 +1,5 @@
+#![allow(needless_pass_by_value)]
+
 use std::path::PathBuf;
 
 use structopt::StructOpt;
